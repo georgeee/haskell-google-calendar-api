@@ -1,7 +1,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE TemplateHaskell   #-}
-module GoogleCalendarAPITypes where
+module GoogleCalendarAPIEntities where
 
 import           Control.Applicative
 import           Control.Monad
@@ -27,16 +27,25 @@ import qualified Data.Text.Lazy.Encoding         as LT
 import qualified Data.Text.Lazy.IO               as LT
 import           Data.HashMap.Strict             (HashMap(..))
 
-newtype Location = Location String
-    deriving (Generic, Show)
+type Location = String
 type ETag = String
 type CalendarId = String
 type ApiTimeZone = String
-newtype Color = Color String
-    deriving (Generic, Show)
 type CalendarColorId = String
 type PageToken = String
 type SyncToken = String
+type Email = String
+type EventICalUID = String
+type PersonId = String
+type EventColorId = String
+type EventRecurrenceRule = String
+type EventId = String
+
+newtype Color = Color String
+    deriving (Generic, Show)
+instance FromJSON Color
+instance ToJSON Color
+
 
 data CalendarListEntry = CalendarListEntry { cleEtag :: ETag
                                            , cleId :: CalendarId
@@ -96,31 +105,59 @@ data CalendarNotificationSettings = CalendarNotificationSettings {
     cnsNotifications :: [CalendarNotification]
 }
     deriving (Generic, Show)
+instance FromJSON CalendarNotificationSettings where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cns" ""
+instance ToJSON CalendarNotificationSettings where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "cns" ""
 
 data CalendarNotification = CalendarNotification {
     cnMethod :: CalendarNotificationMethod,
     cnType :: CalendarNotificationType
 }
     deriving (Generic, Show)
+instance FromJSON CalendarNotification where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cn" ""
+instance ToJSON CalendarNotification where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "cn" ""
 
 data CalendarNotificationMethod = CNMEmail | CNMSms
     deriving (Generic, Show)
+instance FromJSON CalendarNotificationMethod where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNM"
+instance ToJSON CalendarNotificationMethod where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNM"
 
 data CalendarNotificationType = CNTEventCreation | CNTEventChange | CNTEventCancellation | CNTEventResponse | CNTAgenda
                         deriving (Generic, Show)
+instance FromJSON CalendarNotificationType where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNT"
+instance ToJSON CalendarNotificationType where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNT"
 
 
 data Reminder = Reminder { crMethod :: CRMethod
                          , crMinutes :: Int
                          }
                         deriving (Generic, Show)
+instance FromJSON Reminder where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cr" ""
+instance ToJSON Reminder where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "cr" ""
 
 data CRMethod = CRMEmail | CRMSms | CRMPopup
                 deriving (Generic, Show)
+instance FromJSON CRMethod where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CRM"
+instance ToJSON CRMethod where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CRM"
                   
 
 data CalendarAccessRole = CARFreeBusyReader | CARReader | CARWriter | CAROwner
                         deriving (Generic, Show)
+instance FromJSON CalendarAccessRole where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CAR"
+instance ToJSON CalendarAccessRole where
+     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CAR"
 
 data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
                                                          , cllrNextPageToken :: Maybe PageToken
@@ -130,39 +167,6 @@ data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
                                 deriving (Generic, Show)
 instance FromJSON CalendarListListResponse where
      parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cllr" ""
-instance FromJSON Reminder where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cr" ""
-instance FromJSON CRMethod where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CRM"
-instance FromJSON CalendarAccessRole where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CAR"
-instance FromJSON CalendarNotificationSettings where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cns" ""
-instance FromJSON CalendarNotification where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cn" ""
-instance FromJSON CalendarNotificationMethod where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNM"
-instance FromJSON CalendarNotificationType where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNT"
-instance FromJSON Color
-instance FromJSON Location
-
-instance ToJSON Reminder where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cr" ""
-instance ToJSON CRMethod where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CRM"
-instance ToJSON CalendarAccessRole where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CAR"
-instance ToJSON CalendarNotificationSettings where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cns" ""
-instance ToJSON CalendarNotification where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cn" ""
-instance ToJSON CalendarNotificationMethod where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNM"
-instance ToJSON CalendarNotificationType where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNT"
-instance ToJSON Color
-instance ToJSON Location
 
 
 data Calendar = Calendar { cEtag :: ETag
@@ -229,8 +233,6 @@ data Event = Event { eEtag :: ETag
     deriving (Generic, Show)
 instance FromJSON Event where
      parseJSON = genericParseJSON $ removePrefixLCFirstOpts "e" ""
-instance ToJSON Event where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "e" ""
 
 data UpdatableEvent = UpdatableEvent { ueStatus :: Maybe EventStatus
                                      , ueSummary :: Maybe T.Text
@@ -460,12 +462,6 @@ instance ToJSON ApiDateTime where
      toJSON (ApiDateTime localTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T" localTime
      toJSON (ApiDateTimeZoned zonedTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T%z" zonedTime
 
-type Email = String
-type EventICalUID = String
-type PersonId = String
-type EventColorId = String
-type EventRecurrenceRule = String
-type EventId = String
 
 removePrefix prefix word = if (take len word) == prefix
                               then ntimes len tail word
