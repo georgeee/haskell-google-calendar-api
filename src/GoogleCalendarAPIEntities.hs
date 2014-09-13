@@ -159,16 +159,6 @@ instance FromJSON CalendarAccessRole where
 instance ToJSON CalendarAccessRole where
      toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CAR"
 
-data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
-                                                         , cllrNextPageToken :: Maybe PageToken
-                                                         , cllrNextSyncToken :: Maybe SyncToken
-                                                         , cllrItems :: [CalendarListEntry]
-                                                         }
-                                deriving (Generic, Show)
-instance FromJSON CalendarListListResponse where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cllr" ""
-
-
 data Calendar = Calendar { cEtag :: ETag
                          , cId :: CalendarId
                          , cSummary :: T.Text

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric     #-}
 module GoogleCalendarAPIRequest where
 
 import           Control.Applicative
@@ -11,6 +12,7 @@ import           Data.Aeson.Types                (FromJSON)
 import           Data.Aeson.TH                   (defaultOptions, Options(..))
 import           GHC.Generics
 
+import           Data.Monoid
 import           Data.Maybe
 import           Data.Time
 import           Data.Time.Format
@@ -32,50 +34,122 @@ import           Data.HashMap.Strict             (HashMap(..))
 
 import           Network.OAuth.OAuth2            (AccessToken, authenticatedRequest, handleResponse, OAuth2Result)
 
-import           Network.HTTP.Client             as Http
-import           Network.HTTP.Client.TLS         as Http
-import           Network.HTTP.Types              as Http
+import           Network.HTTP.Client             (Manager, RequestBody(..), Request, parseUrl)
+import qualified Network.HTTP.Client             as H
+import           Network.HTTP.Types              (StdMethod(..), HeaderName)
+import           Network.HTTP.QueryString        as Q
+
 
 import qualified Data.CaseInsensitive            as CI
+import           GHC.Generics
+
+import           GoogleCalendarAPIEntities
 
 class ApiRequestParams a where
-    getRequestParams :: a -> [(String, String)]
-    getRequestParams = const []
+    requestQueryParams :: a -> [(String, String)]
+    requestQueryParams = const []
 
-    getRequestBody :: a -> Maybe AT.Value
-    getRequestBody = const Nothing
+    requestBody :: a -> Maybe AT.Value
+    requestBody = const Nothing
 
-    getRequestUrl :: a -> String
+    requestUrlBase :: a -> String
 
-    needAuthorization :: a -> Bool
-    needAuthorization = const False
+    requestMethod :: a -> StdMethod
+    requestMethod x |isJust (requestBody x)  = POST
+                    |otherwise               = GET
     
-    getRequestMethod :: a -> Http.StdMethod
-    getRequestMethod x |isJust (getRequestBody x)  = Http.POST
-                       |otherwise                  = Http.GET
+class (ApiRequestParams a) => ModifiableApiRequestParams a where
+    setRequestParam :: String -> String -> a -> a
 
-processRequest :: (ApiRequestParams rT, FromJSON a) => Http.Manager -> AccessToken -> rT -> IO (OAuth2Result a)
-processRequest manager token reqParams = liftM parseResponseJSON $ processRequestLBS manager token reqParams
+class (ApiRequestParams a) => PagableRequestParams a where
+    setPageToken :: PageToken -> a -> a
 
-processRequestLBS :: (ApiRequestParams rT) => Http.Manager -> AccessToken -> rT -> IO (OAuth2Result L.ByteString)
+processRequest' :: (ApiRequestParams rT, FromJSON a) => Manager -> AccessToken -> rT -> IO (OAuth2Result a)
+processRequest' manager token reqParams = liftM parseResponseJSON $ processRequestLBS manager token reqParams
+
+processRequest :: (ApiRequestParams rT, FromJSON a) => Manager -> AccessToken -> rT -> IO a
+processRequest m t r = processRequest' m t r >>= either (fail . ("OAuth2 error : " ++) . L8.unpack) return
+
+replacePair (n, v) = ((n, v) :) . filter (\(x, _) -> x /= n)
+
+replacePairs :: (Eq a) => [(a, b)] -> [(a, b)] -> [(a, b)]
+replacePairs = foldr replacePair
+
+processRequestLBS :: (ApiRequestParams rT) => Manager -> AccessToken -> rT -> IO (OAuth2Result L.ByteString)
 processRequestLBS manager token reqParams = do request <- composeRequest reqParams
-                                               response <- authenticatedRequest manager token (getRequestMethod reqParams) request
+                                               response <- authenticatedRequest manager token (requestMethod reqParams) request
                                                return $ handleResponse response
-                             where composeRequest reqParams = do initReq <- parseUrl $ getRequestUrl reqParams
-                                                                 let req' = case getRequestBody reqParams of
-                                                                            Nothing -> initReq
-                                                                            Just body -> initReq{ requestBody = RequestBodyLBS $ encode body
-                                                                                                , requestHeaders = replaceHeaders headersForReplace $ requestHeaders initReq
-                                                                                                }
-                                                                 return req'
+                             where composeRequest reqParams = do initReq <- parseUrl $ requestUrlBase reqParams
+                                                                 return $ let body' = RequestBodyLBS . encode
+                                                                              headers' = replacePairs headersForReplace $ H.requestHeaders initReq
+                                                                              qs' = modifyQS (H.queryString initReq) (requestQueryParams reqParams)
+                                                                              req' b = initReq{ H.requestBody = body' b
+                                                                                              , H.requestHeaders = headers'
+                                                                                              , H.queryString = qs'
+                                                                                              }
+                                                                           in  maybe initReq req' $ requestBody reqParams
                                    headersForReplace' = [("Content-Type", "application/json")]
-                                   headersForReplace :: [(Http.HeaderName, B.ByteString)]
-                                   headersForReplace = map (\(name, value) -> (CI.mk $ B8.pack name, B8.pack value)) headersForReplace'
-                                   replaceHeaders ((name, value):rest) headers = replaceHeaders rest $ (name, value) : filter (\(x, _) -> x /= name) headers
-                                   replaceHeaders [] headers = headers
+                                   headersForReplace = map (\(n, v) -> (CI.mk $ B8.pack n, B8.pack v)) headersForReplace'
+
+modifyQS :: B8.ByteString -> [(String, String)] -> B8.ByteString
+modifyQS orig ps = let orig' = maybe mempty id $ Q.parseQuery orig                                                        
+                       ps'   = Q.queryString $ map (\(x, y) -> (B8.pack x, B8.pack y)) ps
+                   in Q.toString $ orig' `mappend` ps'
 
 parseResponseJSON :: FromJSON a => OAuth2Result L.ByteString -> OAuth2Result a
 parseResponseJSON (Left b) = Left b
 parseResponseJSON (Right b) = case decode b of
                             Nothing -> Left (L8.pack "Could not decode JSON" `L.append` b)
                             Just x -> Right x
+
+class PagableResponse a where
+    nextPageToken :: a -> Maybe PageToken
+    nextPageToken = const Nothing
+
+    mergeResponses :: a -> a -> a
+
+
+data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
+                                                         , cllrNextPageToken :: Maybe PageToken
+                                                         , cllrNextSyncToken :: Maybe SyncToken
+                                                         , cllrItems :: [CalendarListEntry]
+                                                         }
+                                deriving (Generic, Show)
+instance FromJSON CalendarListListResponse where
+     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cllr" ""
+instance PagableResponse CalendarListListResponse where 
+     nextPageToken = cllrNextPageToken
+     mergeResponses a b = b { cllrItems = cllrItems a ++ cllrItems b }
+
+calendarAPIBase = "https://www.googleapis.com/calendar/v3/"
+
+data CalendarListListRequestParams = CalendarListListRequestParams { cllrpMaxResults :: Maybe Int
+                                                                   , cllrpMinAccessRole :: Maybe CalendarAccessRole
+                                                                   , cllrpPageToken :: Maybe PageToken
+                                                                   , cllrpShowDeleted :: Maybe Bool
+                                                                   , cllrpShowHidden :: Maybe Bool
+                                                                   , cllrpSyncToken :: Maybe SyncToken
+                                                                   }
+
+instance ApiRequestParams CalendarListListRequestParams where
+    requestUrlBase = const $ calendarAPIBase ++ "users/me/calendarList"
+    -- @TODO add generic params
+instance PagableRequestParams CalendarListListRequestParams where
+    setPageToken token reqParams = reqParams { cllrpPageToken = Just token }
+    -- @TODO add generic pageToken
+
+
+
+calendarListList m t r = processRequest m t r :: IO CalendarListListResponse
+
+iterateOverPages :: (PagableRequestParams rT, PagableResponse a) => (rT -> IO a) -> rT -> IO a
+iterateOverPages func = iter'
+                            where iter resp reqParams = case nextPageToken resp of
+                                                             Nothing -> return resp
+                                                             Just tok -> liftM (mergeResponses resp) $ iter' $ setPageToken tok reqParams
+                                  iter' reqParams = do resp <- func reqParams
+                                                       iter resp reqParams
+
+
+
+-- @TODO abstract result merging (all methods except Events.list provide the same mechanism)
