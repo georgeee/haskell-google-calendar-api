@@ -1,31 +1,21 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE TemplateHaskell   #-}
-module GoogleCalendarAPIEntities where
+{-# LANGUAGE DeriveGeneric, TemplateHaskell   #-}
+module Network.Google.Calendar.Entities where
 
-import           Control.Applicative
 import           Control.Monad
 
-import           Data.Char (toLower)
 import           Data.Aeson
 import           Data.Aeson.Types                as AT
-import           Data.Aeson.TH
 import           GHC.Generics
 
 import           Data.Time
-import           Data.Time.Format
-import           Data.DateTime
 import           Data.Time.RFC3339
 import           System.Locale
 
-import qualified Data.ByteString.Lazy            as L
 import qualified Data.Text                       as T
-import qualified Data.Text.Encoding              as T
-import qualified Data.Text.IO                    as T
-import qualified Data.Text.Lazy                  as LT
-import qualified Data.Text.Lazy.Encoding         as LT
-import qualified Data.Text.Lazy.IO               as LT
 import           Data.HashMap.Strict             (HashMap(..))
+
+import           Network.Google.Calendar.Common
+import           Network.Google.Calendar.Entities.Internal
 
 type Location = String
 type ETag = String
@@ -45,6 +35,71 @@ newtype Color = Color String
     deriving (Generic, Show)
 instance FromJSON Color
 instance ToJSON Color
+
+newtype EventDate = EventDate Day
+    deriving (Generic, Show)
+instance FromJSON EventDate where
+     parseJSON (String text) = returnMaybe $ parsedDay
+                           where returnMaybe (Just day) = return $ EventDate day
+                                 returnMaybe _ = mzero
+                                 parsedDay = parseTime defaultTimeLocale "%F" $ T.unpack text :: Maybe Day
+instance ToJSON EventDate where
+     toJSON (EventDate day) = AT.String $ T.pack $ formatTime defaultTimeLocale "%F" day
+
+data ApiDateTime = ApiDateTime LocalTime | ApiDateTimeZoned ZonedTime
+    deriving (Generic, Show)
+instance FromJSON ApiDateTime where
+     parseJSON (String timeText) = case tryZoned timeString of
+                                        (Just zonedTime) -> return $ ApiDateTimeZoned zonedTime
+                                        Nothing -> case tryLocal timeString of
+                                                        (Just localTime) -> return $ ApiDateTime localTime
+                                                        Nothing -> mzero
+                                   where tryZoned = readRFC3339
+                                         tryLocal = parseTime defaultTimeLocale "%FT%T" :: String -> Maybe LocalTime
+                                         timeString = T.unpack timeText
+instance ToJSON ApiDateTime where
+     toJSON (ApiDateTime localTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T" localTime
+     toJSON (ApiDateTimeZoned zonedTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T%z" zonedTime
+
+
+data CalendarNotificationMethod = CNMEmail | CNMSms
+    deriving (Generic, Show)
+$(generateEntityInstances "" "CNM" ''CalendarNotificationMethod)
+
+data CalendarNotificationType = CNTEventCreation | CNTEventChange | CNTEventCancellation | CNTEventResponse | CNTAgenda
+   deriving (Generic, Show)
+$(generateEntityInstances "" "CNT" ''CalendarNotificationType)
+
+data CalendarNotification = CalendarNotification {
+    cnMethod :: CalendarNotificationMethod,
+    cnType :: CalendarNotificationType
+}
+    deriving (Generic, Show)
+$(generateEntityInstances "cn" "" ''CalendarNotification)
+
+data CalendarNotificationSettings = CalendarNotificationSettings {
+    cnsNotifications :: [CalendarNotification]
+}
+    deriving (Generic, Show)
+$(generateEntityInstances "cns" "" ''CalendarNotificationSettings)
+
+data CRMethod = CRMEmail | CRMSms | CRMPopup
+                deriving (Generic, Show)
+$(generateEntityInstances "" "CRM" ''CRMethod)
+                  
+data Reminder = Reminder { crMethod :: CRMethod
+                         , crMinutes :: Int
+                         }
+                        deriving (Generic, Show)
+$(generateEntityInstances "cr" "" ''Reminder)
+
+
+data CalendarAccessRole = CARFreeBusyReader | CARReader | CARWriter | CAROwner
+                        deriving (Generic, Show)
+$(generateEntityInstances "" "CAR" ''CalendarAccessRole)
+instance ToString CalendarAccessRole where
+    toString = removePrefixLCFirst "CAR" . show
+
 
 
 data CalendarListEntry = CalendarListEntry { cleEtag :: ETag
@@ -66,8 +121,7 @@ data CalendarListEntry = CalendarListEntry { cleEtag :: ETag
                                            , cleDeleted :: Maybe Bool
                                            }
     deriving (Generic, Show)
-instance FromJSON CalendarListEntry where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cle" ""
+$(generateEntityInstances "cle" "" ''CalendarListEntry)
 
 data InsertableCalendarListEntry = InsertableCalendarListEntry { icleId :: CalendarId
                                                                , icleSummaryOverride :: Maybe T.Text
@@ -80,8 +134,7 @@ data InsertableCalendarListEntry = InsertableCalendarListEntry { icleId :: Calen
                                                                , icleNotificationSettings :: Maybe CalendarNotificationSettings
                                                                }
     deriving (Generic, Show)
-instance ToJSON InsertableCalendarListEntry where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "icle" ""
+$(generateEntityInstances "icle" "" ''InsertableCalendarListEntry)
 
 data UpdatableCalendarListEntry = UpdatableCalendarListEntry { ucleSummaryOverride :: Maybe T.Text
                                                              , ucleColorId :: Maybe CalendarColorId
@@ -93,71 +146,9 @@ data UpdatableCalendarListEntry = UpdatableCalendarListEntry { ucleSummaryOverri
                                                              , ucleNotificationSettings :: Maybe CalendarNotificationSettings
                                                              }
     deriving (Generic, Show)
-instance ToJSON UpdatableCalendarListEntry where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "ucle" ""
+$(generateEntityInstances "ucle" "" ''UpdatableCalendarListEntry)
 
--- @TODO insertable, updatable calendar, calendarList + events/calendars responses
--- @TODO move types to own module
--- @TODO apis (hope less time than types)
 -- @TODO clean input types (E.g. Event), Maybe Bool => Bool, Maybe [] -> [], remove ToJSON instance (check that no use)
-
-data CalendarNotificationSettings = CalendarNotificationSettings {
-    cnsNotifications :: [CalendarNotification]
-}
-    deriving (Generic, Show)
-instance FromJSON CalendarNotificationSettings where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cns" ""
-instance ToJSON CalendarNotificationSettings where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cns" ""
-
-data CalendarNotification = CalendarNotification {
-    cnMethod :: CalendarNotificationMethod,
-    cnType :: CalendarNotificationType
-}
-    deriving (Generic, Show)
-instance FromJSON CalendarNotification where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cn" ""
-instance ToJSON CalendarNotification where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cn" ""
-
-data CalendarNotificationMethod = CNMEmail | CNMSms
-    deriving (Generic, Show)
-instance FromJSON CalendarNotificationMethod where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNM"
-instance ToJSON CalendarNotificationMethod where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNM"
-
-data CalendarNotificationType = CNTEventCreation | CNTEventChange | CNTEventCancellation | CNTEventResponse | CNTAgenda
-                        deriving (Generic, Show)
-instance FromJSON CalendarNotificationType where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CNT"
-instance ToJSON CalendarNotificationType where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CNT"
-
-
-data Reminder = Reminder { crMethod :: CRMethod
-                         , crMinutes :: Int
-                         }
-                        deriving (Generic, Show)
-instance FromJSON Reminder where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "cr" ""
-instance ToJSON Reminder where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "cr" ""
-
-data CRMethod = CRMEmail | CRMSms | CRMPopup
-                deriving (Generic, Show)
-instance FromJSON CRMethod where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CRM"
-instance ToJSON CRMethod where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CRM"
-                  
-
-data CalendarAccessRole = CARFreeBusyReader | CARReader | CARWriter | CAROwner
-                        deriving (Generic, Show)
-instance FromJSON CalendarAccessRole where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "CAR"
-instance ToJSON CalendarAccessRole where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "CAR"
 
 data Calendar = Calendar { cEtag :: ETag
                          , cId :: CalendarId
@@ -167,13 +158,11 @@ data Calendar = Calendar { cEtag :: ETag
                          , cTimeZone :: Maybe ApiTimeZone
                          }
                     deriving (Generic, Show)
-instance FromJSON Calendar where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "c" ""
+$(generateEntityInstances "c" "" ''Calendar)
 
 data InsertableCalendar = InsertableCalendar { icSummary :: T.Text }
                     deriving (Generic, Show)
-instance ToJSON InsertableCalendar where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "ic" ""
+$(generateEntityInstances "ic" "" ''InsertableCalendar)
 
 data UpdatableCalendar = UpdatableCalendar { ucSummary :: Maybe T.Text
                                            , ucDescription :: Maybe T.Text
@@ -181,8 +170,84 @@ data UpdatableCalendar = UpdatableCalendar { ucSummary :: Maybe T.Text
                                            , ucTimeZone :: Maybe ApiTimeZone
                                            }
                     deriving (Generic, Show)
-instance ToJSON UpdatableCalendar where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "uc" ""
+$(generateEntityInstances "uc" "" ''UpdatableCalendar)
+
+data EventTransparency = ETOpaque | ETTransparent
+    deriving (Generic, Show)
+$(generateEntityInstances "" "ET" ''EventTransparency)
+
+data EventReminders = EventReminders { erUseDefault :: Bool
+                                     , erOverrides  :: Maybe [Reminder]
+                                     }
+    deriving (Generic, Show)
+$(generateEntityInstances "er" "" ''EventReminders)
+
+data EventSource = EventSource { esUrl :: String, esTitle :: String }
+    deriving (Generic, Show)
+$(generateEntityInstances "es" "" ''EventSource)
+
+data EventVisibility = EVDefault | EVPublic | EVPrivate | EVConfidential
+    deriving (Generic, Show)
+$(generateEntityInstances "" "EV" ''EventVisibility)
+
+data EventExtendedProps = EventExtendedProps { eepPrivate :: HashMap String String
+                                             , eepShared  :: HashMap String String
+                                             }
+    deriving (Generic, Show)
+$(generateEntityInstances "eep" "" ''EventExtendedProps)
+
+data EAResponseStatus = EASNeedsAction | EASDeclined | EASTentative | EASAccepted
+    deriving (Generic, Show)
+$(generateEntityInstances "" "EAS" ''EAResponseStatus)
+
+data EventAttendee = EventAttendee { eaId :: Maybe PersonId
+                                   , eaEmail :: Maybe Email 
+                                   , eaDisplayName :: Maybe String
+                                   , eaOrganizer :: Maybe Bool
+                                   , eaSelf :: Maybe Bool
+                                   , eaResource :: Maybe Bool
+                                   , eaOptional :: Maybe Bool
+                                   , eaResponseStatus :: EAResponseStatus
+                                   , eaComment :: Maybe String
+                                   , eaAdditionalGuests :: Maybe Int
+                                   }
+    deriving (Generic, Show)
+$(generateEntityInstances "ea" "" ''EventAttendee)
+
+data WritableEventAttendee = WritableEventAttendee { weaEmail :: Email
+                                                   , weaDisplayName :: Maybe String
+                                                   , weaOptional :: Maybe Bool
+                                                   , weaResponseStatus :: Maybe EAResponseStatus
+                                                   , weaComment :: Maybe String
+                                                   , weaAdditionalGuests :: Maybe Int
+                                                   }
+    deriving (Generic, Show)
+$(generateEntityInstances "wea" "" ''WritableEventAttendee)
+
+data EventStatus = EConfirmed | ETentative | ECancelled
+    deriving (Generic, Show)
+$(generateEntityInstances "" "E" ''EventStatus)
+
+data EventPerson = EventPerson { pId :: Maybe PersonId
+                               , pEmail :: Maybe Email
+                               , pDisplayName :: Maybe String
+                               , pSelf :: Maybe Bool
+                               }
+    deriving (Generic, Show)
+$(generateEntityInstances "p" "" ''EventPerson)
+
+data InsertableEventPerson = InsertableEventPerson { wpEmail :: Maybe Email
+                                                   , wpDisplayName :: Maybe String
+                                                   }
+    deriving (Generic, Show)
+$(generateEntityInstances "wp" "" ''InsertableEventPerson)
+
+data EventDateTimeObject = EventDateTimeObject { edtDate :: Maybe EventDate
+                                               , edtDateTime :: Maybe ApiDateTime
+                                               , edtTimeZone :: Maybe ApiTimeZone
+                                               }
+    deriving (Generic, Show)
+$(generateEntityInstances "edt" "" ''EventDateTimeObject)
 
 data Event = Event { eEtag :: ETag
                    , eId :: EventId
@@ -221,8 +286,7 @@ data Event = Event { eEtag :: ETag
                    , eSource :: Maybe EventSource
                    }
     deriving (Generic, Show)
-instance FromJSON Event where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "e" ""
+$(generateEntityInstances "e" "" ''Event)
 
 data UpdatableEvent = UpdatableEvent { ueStatus :: Maybe EventStatus
                                      , ueSummary :: Maybe T.Text
@@ -247,8 +311,7 @@ data UpdatableEvent = UpdatableEvent { ueStatus :: Maybe EventStatus
                                      , ueSource :: Maybe EventSource
                                      }
     deriving (Generic, Show)
-instance ToJSON UpdatableEvent where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "ue" ""
+$(generateEntityInstances "ue" "" ''UpdatableEvent)
 defaultUpdatableEvent start end = UpdatableEvent { ueStatus = Nothing
                                                  , ueSummary = Nothing
                                                  , ueDescription = Nothing
@@ -294,8 +357,7 @@ data InsertableEvent = InsertableEvent { ieStatus :: Maybe EventStatus
                                        , ieSource :: Maybe EventSource
                                        }
     deriving (Generic, Show)
-instance ToJSON InsertableEvent where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "ie" ""
+$(generateEntityInstances "ie" "" ''InsertableEvent)
 defaultInsertableEvent start end = InsertableEvent { ieStatus = Nothing
                                                    , ieId = Nothing
                                                    , ieSummary = Nothing
@@ -318,169 +380,3 @@ defaultInsertableEvent start end = InsertableEvent { ieStatus = Nothing
                                                    , ieSource = Nothing
                                                    }
 
-data EventTransparency = ETOpaque | ETTransparent
-    deriving (Generic, Show)
-instance FromJSON EventTransparency where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "ET"
-instance ToJSON EventTransparency where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "ET"
-
-data EventReminders = EventReminders { erUseDefault :: Bool
-                                     , erOverrides  :: Maybe [Reminder]
-                                     }
-    deriving (Generic, Show)
-instance FromJSON EventReminders where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "er" ""
-instance ToJSON EventReminders where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "er" ""
-
-data EventSource = EventSource { esUrl :: String, esTitle :: String }
-    deriving (Generic, Show)
-instance FromJSON EventSource where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "es" ""
-instance ToJSON EventSource where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "es" ""
-
-data EventVisibility = EVDefault | EVPublic | EVPrivate | EVConfidential
-    deriving (Generic, Show)
-instance FromJSON EventVisibility where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "EV"
-instance ToJSON EventVisibility where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "EV"
-
-data EventExtendedProps = EventExtendedProps { eepPrivate :: HashMap String String
-                                             , eepShared  :: HashMap String String
-                                             }
-    deriving (Generic, Show)
-instance FromJSON EventExtendedProps where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "eep" ""
-instance ToJSON EventExtendedProps where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "eep" ""
-
-data EventAttendee = EventAttendee { eaId :: Maybe PersonId
-                                   , eaEmail :: Maybe Email 
-                                   , eaDisplayName :: Maybe String
-                                   , eaOrganizer :: Maybe Bool
-                                   , eaSelf :: Maybe Bool
-                                   , eaResource :: Maybe Bool
-                                   , eaOptional :: Maybe Bool
-                                   , eaResponseStatus :: EAResponseStatus
-                                   , eaComment :: Maybe String
-                                   , eaAdditionalGuests :: Maybe Int
-                                   }
-    deriving (Generic, Show)
-instance FromJSON EventAttendee where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "ea" ""
-instance ToJSON EventAttendee where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "ea" ""
-
-data WritableEventAttendee = WritableEventAttendee { weaEmail :: Email
-                                                   , weaDisplayName :: Maybe String
-                                                   , weaOptional :: Maybe Bool
-                                                   , weaResponseStatus :: Maybe EAResponseStatus
-                                                   , weaComment :: Maybe String
-                                                   , weaAdditionalGuests :: Maybe Int
-                                                   }
-    deriving (Generic, Show)
-instance ToJSON WritableEventAttendee where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "wea" ""
-
-data EAResponseStatus = EASNeedsAction | EASDeclined | EASTentative | EASAccepted
-    deriving (Generic, Show)
-instance FromJSON EAResponseStatus where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "EAS"
-instance ToJSON EAResponseStatus where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "EAS"
-
-data EventStatus = EConfirmed | ETentative | ECancelled
-    deriving (Generic, Show)
-instance FromJSON EventStatus where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "" "E"
-instance ToJSON EventStatus where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "" "E"
-
-data EventPerson = EventPerson { pId :: Maybe PersonId
-                               , pEmail :: Maybe Email
-                               , pDisplayName :: Maybe String
-                               , pSelf :: Maybe Bool
-                               }
-    deriving (Generic, Show)
-instance FromJSON EventPerson where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "p" ""
-instance ToJSON EventPerson where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "p" ""
-
-data InsertableEventPerson = InsertableEventPerson { wpEmail :: Maybe Email
-                                                   , wpDisplayName :: Maybe String
-                                                   }
-    deriving (Generic, Show)
-instance ToJSON InsertableEventPerson where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "wp" ""
-
-data EventDateTimeObject = EventDateTimeObject { edtDate :: Maybe EventDate
-                                               , edtDateTime :: Maybe ApiDateTime
-                                               , edtTimeZone :: Maybe ApiTimeZone
-                                               }
-    deriving (Generic, Show)
-instance FromJSON EventDateTimeObject where
-     parseJSON = genericParseJSON $ removePrefixLCFirstOpts "edt" ""
-instance ToJSON EventDateTimeObject where
-     toJSON = genericToJSON $ removePrefixLCFirstOpts "edt" ""
-
-newtype EventDate = EventDate Day
-    deriving (Generic, Show)
-instance FromJSON EventDate where
-     parseJSON (String text) = returnMaybe $ parsedDay
-                           where returnMaybe (Just day) = return $ EventDate day
-                                 returnMaybe _ = mzero
-                                 parsedDay = parseTime defaultTimeLocale "%F" $ T.unpack text :: Maybe Day
-instance ToJSON EventDate where
-     toJSON (EventDate day) = AT.String $ T.pack $ formatTime defaultTimeLocale "%F" day
-
-data ApiDateTime = ApiDateTime LocalTime | ApiDateTimeZoned ZonedTime
-    deriving (Generic, Show)
-instance FromJSON ApiDateTime where
-     parseJSON (String timeText) = case tryZoned timeString of
-                                        (Just zonedTime) -> return $ ApiDateTimeZoned zonedTime
-                                        Nothing -> case tryLocal timeString of
-                                                        (Just localTime) -> return $ ApiDateTime localTime
-                                                        Nothing -> mzero
-                                   where tryZoned = readRFC3339
-                                         tryLocal = parseTime defaultTimeLocale "%FT%T" :: String -> Maybe LocalTime
-                                         timeString = T.unpack timeText
-instance ToJSON ApiDateTime where
-     toJSON (ApiDateTime localTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T" localTime
-     toJSON (ApiDateTimeZoned zonedTime) = AT.String $ T.pack $ formatTime defaultTimeLocale "%FT%T%z" zonedTime
-
-
-removePrefix prefix word = if (take len word) == prefix
-                              then ntimes len tail word
-                              else word
-                                where ntimes n f = foldr (.) id (replicate n f)
-                                      len = length prefix
-lcFirst (a:as) = (toLower a) : as
-removePrefixLCFirst prefix = lcFirst . (removePrefix prefix)
-
-removePrefixLCFirstOpts flPrefix ctPrefix = defaultOptions { fieldLabelModifier = removePrefixLCFirst flPrefix
-                                                       , constructorTagModifier = removePrefixLCFirst ctPrefix
-                                                       , omitNothingFields = True
-                                                       }
-
-
-
-
-
-testParseJSONFromFile file = do json <- LT.readFile file
-                                let jsonLBS = LT.encodeUtf8 json
-                                return $ decode jsonLBS
-
-
-transformFile func inputFile outPutFile = do result <- func inputFile
-                                             writeFile outPutFile $ show result
-
-testImportJSONFileOut func inputFile outPutFile = do result <- testParseJSONFromFile inputFile
-                                                     writeFile outPutFile $ show $ func result
-testImportJSON func inputFile = do result <- testParseJSONFromFile inputFile
-                                   putStrLn $ show $ func result
-testImportExportJSON func inputFile outPutFile = do result <- testParseJSONFromFile inputFile
-                                                    L.writeFile outPutFile $ encode $ func result
