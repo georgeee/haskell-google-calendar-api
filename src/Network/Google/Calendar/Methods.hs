@@ -3,10 +3,14 @@ module Network.Google.Calendar.Methods where
 
 import           GHC.Generics
 
-import           Network.Google.Calendar.Entities       as E
+import           Network.Google.Calendar.Entities         as E
 import           Network.Google.Calendar.Methods.Internal
 import           Network.Google.Calendar.Api
 
+class DefaultParams a where
+    defaultParams :: a
+
+-- Method calendar#calendarList
 
 data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
                                                          , cllrNextPageToken :: Maybe PageToken
@@ -15,7 +19,6 @@ data CalendarListListResponse = CalendarListListResponse { cllrEtag :: ETag
                                                          }
                                 deriving (Generic, Show)
 $(generatePagableResponseInstances "cllr" ''CalendarListListResponse)
-
 
 data CalendarListListRequestParams = CalendarListListRequestParams { cllrpMaxResults :: Maybe Int
                                                                    , cllrpMinAccessRole :: Maybe CalendarAccessRole
@@ -26,7 +29,8 @@ data CalendarListListRequestParams = CalendarListListRequestParams { cllrpMaxRes
                                                                    }
                                 deriving (Generic, Show)
 $(generatePagableRequestInstances "users/me/calendarList" "cllrp" ''CalendarListListRequestParams)
+instance DefaultParams CalendarListListRequestParams where
+    defaultParams = CalendarListListRequestParams Nothing Nothing Nothing Nothing Nothing Nothing
 
-defaultCalendarListListRequestParams = CalendarListListRequestParams Nothing Nothing Nothing Nothing Nothing Nothing
-calendarListList r = request r :: ApiIO CalendarListListRequestParams CalendarListListResponse
-
+calendarListList :: MethodTag CalendarListListRequestParams CalendarListListResponse
+calendarListList = readOnlyScopeMethod

@@ -1,8 +1,5 @@
 {-# LANGUAGE TemplateHaskell, FlexibleInstances #-}
-module Network.Google.Calendar.Methods.Internal (ApiRequestParams(..), PagableRequestParams(..), PagableResponse(..), calendarAPIUrlBase,
-                         generateFromJSONInstance, generatePagableResponseInstance, generatePagableRequestInstances,
-                         generatePagableResponseInstances, generatePagableRequestInstancesImpl, generatePagableRequestInstancesWithBody,
-                         generateApiRequestParamsInstance, generatePagableRequestParamsInstance) where
+module Network.Google.Calendar.Methods.Internal where
 
 import           Data.Aeson.Types
 import           Data.Maybe
@@ -86,3 +83,5 @@ generatePagableRequestInstancesImpl url bodyQ prefix typeName = concatM decs
                                                                 where url' = calendarAPIUrlBase ++ url
                                                                       decs = [ generateApiRequestParamsInstance url' bodyQ prefix typeName
                                                                              , generatePagableRequestParamsInstance prefix typeName ]
+
+

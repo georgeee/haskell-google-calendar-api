@@ -2,8 +2,8 @@
 module Network.Google.Calendar.Api (ApiIO, processApiIO,
                      rawRequest, request', request, requestBS,
                      processRequest, processRequest', processRawRequest, processRequestBS,
-                     iterateOverPages,
-                     parseResponseJSON) where
+                     iterateOverPages, parseResponseJSON,
+                     MethodTag(..), AuthScope(..), readOnlyScopeMethod, fullScopeMethod) where
 
 import           Control.Monad
 import           Control.Monad.Free
@@ -24,9 +24,8 @@ import           Network.HTTP.QueryString        as Q
 
 import qualified Data.CaseInsensitive            as CI
 
-
-import           Network.Google.Calendar.Common
 import           Network.Google.Calendar.Methods.Internal
+import           Network.Google.Calendar.Common
 
 data ApiIOF arg f = RawRequest arg (OAuth2Result L.ByteString -> f)
 
@@ -38,6 +37,18 @@ processApiIOF m t (RawRequest r f) = processRequestLBS m t r >>= f
 
 processApiIO m t = iterM $ processApiIOF m t
 type ApiIO arg = Free (ApiIOF arg)
+
+
+data AuthScope = ScopeReadOnly | ScopeFull
+data MethodTag paramsT respT = MethodTag { authScope :: AuthScope
+                                         , apiMethod    :: paramsT -> ApiIO paramsT respT
+                                         }
+
+fullScopeMethod :: (ApiRequestParams rT, FromJSON b) => MethodTag rT b
+fullScopeMethod = MethodTag ScopeFull request
+
+readOnlyScopeMethod :: (ApiRequestParams rT, FromJSON b) => MethodTag rT b
+readOnlyScopeMethod = MethodTag ScopeReadOnly request
 
 rawRequest :: (ApiRequestParams rT) => (OAuth2Result L8.ByteString -> f) -> rT -> ApiIO rT f
 rawRequest r = liftF . (flip RawRequest) r
