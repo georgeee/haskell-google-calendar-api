@@ -10,7 +10,6 @@ import Network.Google.Calendar.Common
 
 type Pair = (String, String)
 
-
 genericParams :: (Generic a, GEntity (Rep a)) => Options -> a -> [(String, String)]
 genericParams opts = extractParams opts . from
 
@@ -44,6 +43,9 @@ instance (RecordToPairs a, RecordToPairs b) => RecordToPairs (a :*: b) where
 
 instance (Selector s, ToString c) => RecordToPairs (S1 s (K1 i c)) where
     recordToPairs = fieldToPair
+
+instance (Selector s) => RecordToPairs (S1 s (K1 i (IgnoredParam f))) where
+    recordToPairs _ _ = empty 
 
 instance (Selector s, ToString c) => RecordToPairs (S1 s (K1 i (Maybe c))) where
     recordToPairs opts (M1 (K1 Nothing)) | omitNothingFields opts = empty

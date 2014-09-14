@@ -135,6 +135,16 @@ data InsertableCalendarListEntry = InsertableCalendarListEntry { icleId :: Calen
                                                                }
     deriving (Generic, Show)
 $(generateEntityInstances "icle" "" ''InsertableCalendarListEntry)
+defaultInsertableCaledarListEntry calendarId = InsertableCalendarListEntry { icleId  = calendarId
+                                                               , icleSummaryOverride = Nothing
+                                                               , icleColorId = Nothing
+                                                               , icleBackgroundColor = Nothing
+                                                               , icleForegroundColor = Nothing
+                                                               , icleHidden = Nothing
+                                                               , icleSelected = Nothing
+                                                               , icleDefaultReminders = Nothing
+                                                               , icleNotificationSettings = Nothing
+                                                               }
 
 data UpdatableCalendarListEntry = UpdatableCalendarListEntry { ucleSummaryOverride :: Maybe T.Text
                                                              , ucleColorId :: Maybe CalendarColorId

@@ -1,7 +1,9 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances     #-}
+{-# LANGUAGE DeriveGeneric, TypeSynonymInstances, FlexibleInstances     #-}
 module Network.Google.Calendar.Common where
+import Data.Aeson
 import Data.Char (toLower)
 import Control.Monad
+import GHC.Generics
 
 removePrefix prefix word = if (take len word) == prefix
                               then ntimes len tail word
@@ -36,3 +38,5 @@ replacePairs = foldr replacePair
 concatM :: (Monad m) => [m [a]] -> m [a]
 concatM = foldr (liftM2 (++)) (return [])
 
+data IgnoredParam a = IgnoredParam { ignoredParamValue :: a }
+    deriving (Show)

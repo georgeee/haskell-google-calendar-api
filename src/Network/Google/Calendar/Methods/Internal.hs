@@ -1,11 +1,14 @@
 {-# LANGUAGE TemplateHaskell, FlexibleInstances #-}
 module Network.Google.Calendar.Methods.Internal where
 
+import qualified Data.ByteString.Char8           as B8
+
 import           Data.Aeson.Types
 import           Data.Maybe
 import           Data.DateTime
-import           Network.HTTP.Types              (StdMethod(..))
+import           Network.HTTP.Types              (StdMethod(..), urlEncode)
 import           Language.Haskell.TH
+import           Language.Haskell.TH.Lift        (deriveLift)
 
 import           Network.Google.Calendar.Entities                        as E
 import           Network.Google.Calendar.Entities.Internal               as E
@@ -54,8 +57,11 @@ generateToJSONInstance prefix typeName = [d|
                                         instance ToJSON $(conT typeName) where
                                              toJSON = genericToJSON $ E.removePrefixLCFirstOpts prefix ""
                                         |]
+generateJSONResponseInstances prefix typeName = concatM [ generateFromJSONInstance prefix typeName
+                                                           , generateToJSONInstance prefix typeName
+                                                           ]
 
-generatePagableResponseInstances prefix typeName = concatM [ generateFromJSONInstance prefix typeName
+generateResponseInstances prefix typeName = concatM [ generateFromJSONInstance prefix typeName
                                                            , generateToJSONInstance prefix typeName
                                                            , generatePagableResponseInstance prefix typeName
                                                            ]
@@ -73,15 +79,26 @@ generateApiRequestParamsInstance :: [Char] -> Q Exp -> [Char] -> Name -> Q [Dec]
 generateApiRequestParamsInstance url bodyQ prefix typeName = [d|
                                         instance ApiRequestParams $(conT typeName) where
                                             requestQueryParams = genericParams $ G.removePrefixLCFirstOpts prefix
-                                            requestBody _ = $(bodyQ)
+                                            requestBody = $(bodyQ)
                                             requestUrlBase _ = url
                                         |]
                                 
-generatePagableRequestInstances url prefix typeName = generatePagableRequestInstancesImpl url [|Nothing|] prefix typeName
-generatePagableRequestInstancesWithBody url bodyQ prefix typeName = generatePagableRequestInstancesImpl url [|Just $(bodyQ)|] prefix typeName
-generatePagableRequestInstancesImpl url bodyQ prefix typeName = concatM decs
+generateRequestInstances url prefix typeName = generateRequestInstancesImpl url [|\_ -> Nothing|] prefix typeName
+generateRequestInstancesWithBody url bodyQ prefix typeName = generateRequestInstancesImpl url [|Just $(bodyQ)|] prefix typeName
+generateRequestInstancesImpl url bodyQ prefix typeName = concatM decs
                                                                 where url' = calendarAPIUrlBase ++ url
                                                                       decs = [ generateApiRequestParamsInstance url' bodyQ prefix typeName
                                                                              , generatePagableRequestParamsInstance prefix typeName ]
+$(deriveLift ''StdMethod)
+
+urlEncode' = B8.unpack . urlEncode False . B8.pack
+
+generatePathRequestParamsInstance :: StdMethod -> String -> Q Exp -> Name -> Q [Dec]
+generatePathRequestParamsInstance method base pathGetter typeName = [d|
+                                        instance ApiRequestParams $(conT typeName) where
+                                            requestUrlBase x = base ++ "/" ++ (urlEncode' ($(pathGetter) x))
+                                            requestMethod _ = $( [| method |] )
+                                        |]
+
 
 
