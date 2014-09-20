@@ -55,11 +55,11 @@ processRequestLBS manager token reqParams = do request <- composeRequest reqPara
                                                                  return $ let body' = RequestBodyLBS . encode
                                                                               headers' = replacePairs headersForReplace $ H.requestHeaders initReq
                                                                               qs' = modifyQS (H.queryString initReq) (requestQueryParams reqParams)
-                                                                              req' b = initReq{ H.requestBody = body' b
+                                                                              req = initReq   { H.queryString = qs'}
+                                                                              req' b = req    { H.requestBody = body' b
                                                                                               , H.requestHeaders = headers'
-                                                                                              , H.queryString = qs'
                                                                                               }
-                                                                           in  maybe initReq req' $ requestBody reqParams
+                                                                           in  maybe req req' $ requestBody reqParams
                                    headersForReplace' = [("Content-Type", "application/json")]
                                    headersForReplace = map (\(n, v) -> (CI.mk $ B8.pack n, B8.pack v)) headersForReplace'
 

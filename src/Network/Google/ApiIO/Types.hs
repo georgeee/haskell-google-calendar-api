@@ -52,6 +52,7 @@ instance QueryParams () where
     queryParams _ = []
 
 data DefaultRequestParams qp ap = DefaultRequestParams qp ap
+    deriving Show
 
 instance (QueryParams a, AdditionalParams b) => ApiRequestParams (DefaultRequestParams a b) where
     requestQueryParams (DefaultRequestParams q _) = queryParams q

@@ -1,8 +1,7 @@
 {-# LANGUAGE DeriveGeneric, TemplateHaskell #-}
-module Network.Google.Calendar.CalendarList where
+module Network.Google.Calendar.CalendarList (module Network.Google.Calendar.CalendarList, module CLEntities) where
 
 import           GHC.Generics
-import           Data.Aeson (toJSON, ToJSON, Value)
 import           Data.List (intercalate)
 
 import           Network.Google.ApiIO
@@ -11,13 +10,10 @@ import           Network.Google.ApiIO.Common (urlEncode)
 import           Network.Google.Calendar.MethodCommon
 
 import           Network.Google.Calendar.Entities
-import           Network.Google.Calendar.CalendarList.Entities
+import           Network.Google.Calendar.CalendarList.Entities as CLEntities
 import           Network.HTTP.Types              (StdMethod(..))
 
 mkUrl = mkUrl' . (["users" , "me" , "calendarList"] ++ )
-
-resourceBody :: (ToJSON a) => a -> Maybe Value
-resourceBody = Just . toJSON
 
 -- Method delete
 
@@ -26,6 +22,8 @@ data DeleteParams = DeleteParams { dpCalendarId :: CalendarId }
 instance AdditionalParams DeleteParams where
     apMethod _ = DELETE
     apUrl x = mkUrl [ urlEncode $ dpCalendarId x ]
+
+deleteParams = DefaultRequestParams () . DeleteParams
 
 delete :: DefaultMethodTag () DeleteParams ()
 delete = fullScopeMethod
@@ -37,6 +35,8 @@ data GetParams = GetParams { gpCalendarId :: CalendarId }
 instance AdditionalParams GetParams where
     apMethod _ = GET
     apUrl x = mkUrl [ urlEncode $ gpCalendarId x ]
+
+getParams = DefaultRequestParams () . GetParams
 
 get :: DefaultMethodTag () GetParams Resource
 get = readOnlyScopeMethod
@@ -54,6 +54,8 @@ data InsertQueryParams = InsertQueryParams { ipColorRgbFormat :: Maybe Bool }
 $(genQueryParams "ip" ''InsertQueryParams)
 instance DefaultParams InsertQueryParams where
     defaultParams = InsertQueryParams Nothing
+
+insertParams qp = DefaultRequestParams qp . InsertParams
 
 insert :: DefaultMethodTag InsertQueryParams InsertParams Resource
 insert = fullScopeMethod
@@ -81,8 +83,10 @@ $(genQueryParams "lp" ''ListQueryParams)
 instance DefaultParams ListQueryParams where
     defaultParams = ListQueryParams Nothing Nothing Nothing Nothing Nothing Nothing
 
-data ListParams = ListParams
-instance AdditionalParams ListParams where apUrl _ = mkUrl [ "list" ]
+data ListParams = ListParams deriving Show
+instance AdditionalParams ListParams where apUrl _ = mkUrl []
+
+listParams qp = DefaultRequestParams qp ListParams
 
 list :: DefaultMethodTag ListQueryParams ListParams ListResponse
 list = readOnlyScopeMethod
@@ -102,6 +106,8 @@ $(genQueryParams "pp" ''PatchQueryParams)
 instance DefaultParams PatchQueryParams where
     defaultParams = PatchQueryParams Nothing
 
+patchParams qp = DefaultRequestParams qp . PatchParams
+
 patch :: DefaultMethodTag PatchQueryParams PatchParams Resource
 patch = fullScopeMethod
 
@@ -120,6 +126,8 @@ data UpdateQueryParams = UpdateQueryParams { upColorRgbFormat :: Maybe Bool }
 $(genQueryParams "up" ''UpdateQueryParams)
 instance DefaultParams UpdateQueryParams where
     defaultParams = UpdateQueryParams Nothing
+
+updateParams qp calendarId body = DefaultRequestParams qp $ UpdateParams calendarId body
 
 update :: DefaultMethodTag UpdateQueryParams UpdateParams Resource
 update = fullScopeMethod
