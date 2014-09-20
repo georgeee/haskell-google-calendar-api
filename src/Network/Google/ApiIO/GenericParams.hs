@@ -1,12 +1,29 @@
 {-# LANGUAGE DeriveGeneric, TypeSynonymInstances, TypeOperators,
              FlexibleInstances, FlexibleContexts, OverlappingInstances     #-}
-module Network.Google.Calendar.Methods.GenericParams (GEntity, genericParams, Options(..), defaultOptions, removePrefixLCFirstOpts) where
+module Network.Google.ApiIO.GenericParams where
 
 import Control.Applicative ((<*>), (<$>), (<|>), pure)
 import GHC.Generics
 import Data.DList (DList, toList, empty)
 import Data.Monoid (mappend)
-import Network.Google.Calendar.Common
+import Network.Google.ApiIO.Common
+
+
+class ToString a where
+    toString :: a -> String
+
+instance ToString String where
+    toString = id
+
+instance ToString Int where
+    toString = show
+
+instance ToString Bool where
+    toString = show
+
+instance (ToString s) => ToString (Maybe s) where
+    toString (Just v) = toString v
+    toString Nothing = ""
 
 type Pair = (String, String)
 
@@ -44,9 +61,6 @@ instance (RecordToPairs a, RecordToPairs b) => RecordToPairs (a :*: b) where
 instance (Selector s, ToString c) => RecordToPairs (S1 s (K1 i c)) where
     recordToPairs = fieldToPair
 
-instance (Selector s) => RecordToPairs (S1 s (K1 i (IgnoredParam f))) where
-    recordToPairs _ _ = empty 
-
 instance (Selector s, ToString c) => RecordToPairs (S1 s (K1 i (Maybe c))) where
     recordToPairs opts (M1 (K1 Nothing)) | omitNothingFields opts = empty
     recordToPairs opts m1 = fieldToPair opts m1
@@ -54,4 +68,3 @@ instance (Selector s, ToString c) => RecordToPairs (S1 s (K1 i (Maybe c))) where
 fieldToPair opts m1 = pure ( fieldLabelModifier opts $ selName m1
                            , toString ( unM1 m1  )
                            )
-

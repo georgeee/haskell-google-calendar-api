@@ -1,10 +1,10 @@
-module Network.Google.Calendar.Constraints (calendarAPIUrlBase, composeGoogleKey) where
+module Network.Google.Calendar.Constraints where
 
 import           Network.OAuth.OAuth2
 import           Data.ByteString                 as B
 import qualified Data.ByteString.Char8           as B8
 
-calendarAPIUrlBase = "https://www.googleapis.com/calendar/v3/"
+calendarAPIUrlBase = "https://www.googleapis.com/calendar/v3"
 
 composeGoogleKey :: ByteString -> ByteString -> OAuth2
 composeGoogleKey clientId clientSecret = OAuth2 { oauthClientId = clientId
@@ -15,3 +15,5 @@ composeGoogleKey clientId clientSecret = OAuth2 { oauthClientId = clientId
                                                 }
 
 
+readOnlyScope = ""
+fullScope = ""

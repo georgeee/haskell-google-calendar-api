@@ -1,9 +1,8 @@
 {-# LANGUAGE ConstraintKinds, RankNTypes #-}
-module Network.Google.Calendar.Api (ApiIO, processApiIO,
-                     rawRequest, request', request, requestBS,
-                     processRequest, processRequest', processRawRequest, processRequestBS,
-                     iterateOverPages, parseResponseJSON,
-                     MethodTag(..), AuthScope(..), readOnlyScopeMethod, fullScopeMethod) where
+module Network.Google.ApiIO (module Types, processApiIOF, processApiIO, methodTag,
+                             rawRequest, requestBS, request', request,
+                             processRawRequest, processRequestBS, processRequest, processRequest',
+                             parseResponseJSON, iteratePages) where
 
 import           Control.Monad
 import           Control.Monad.Free
@@ -11,44 +10,25 @@ import           Control.Monad.Free
 import           Data.Aeson                      (encode, decode)
 import           Data.Aeson.Types                as AT
 
-import           Data.Monoid
-
 import qualified Data.ByteString.Char8           as B8
 import qualified Data.ByteString.Lazy            as L
 import qualified Data.ByteString.Lazy.Char8      as L8
+import qualified Data.CaseInsensitive            as CI
 
 import           Network.OAuth.OAuth2            (AccessToken, authenticatedRequest, handleResponse, OAuth2Result)
 import           Network.HTTP.Client             (Manager, RequestBody(..), parseUrl)
 import qualified Network.HTTP.Client             as H
-import           Network.HTTP.QueryString        as Q
 
-import qualified Data.CaseInsensitive            as CI
-
-import           Network.Google.Calendar.Methods.Internal
-import           Network.Google.Calendar.Common
-
-data ApiIOF arg f = RawRequest arg (OAuth2Result L.ByteString -> f)
-
-instance Functor (ApiIOF arg) where
-    fmap f (RawRequest r k) = RawRequest r (f . k)
+import           Network.Google.ApiIO.Types      as Types
+import           Network.Google.ApiIO.Common
 
 processApiIOF :: (ApiRequestParams rT) => Manager -> AccessToken -> ApiIOF rT (IO r) -> IO r
 processApiIOF m t (RawRequest r f) = processRequestLBS m t r >>= f
 
 processApiIO m t = iterM $ processApiIOF m t
-type ApiIO arg = Free (ApiIOF arg)
 
-
-data AuthScope = ScopeReadOnly | ScopeFull
-data MethodTag paramsT respT = MethodTag { authScope :: AuthScope
-                                         , apiMethod    :: paramsT -> ApiIO paramsT respT
-                                         }
-
-fullScopeMethod :: (ApiRequestParams rT, FromJSON b) => MethodTag rT b
-fullScopeMethod = MethodTag ScopeFull request
-
-readOnlyScopeMethod :: (ApiRequestParams rT, FromJSON b) => MethodTag rT b
-readOnlyScopeMethod = MethodTag ScopeReadOnly request
+methodTag :: (ApiRequestParams rT, FromJSON b) => [AuthScope] -> MethodTag rT b
+methodTag = flip MethodTag request
 
 rawRequest :: (ApiRequestParams rT) => (OAuth2Result L8.ByteString -> f) -> rT -> ApiIO rT f
 rawRequest r = liftF . (flip RawRequest) r
@@ -83,10 +63,6 @@ processRequestLBS manager token reqParams = do request <- composeRequest reqPara
                                    headersForReplace' = [("Content-Type", "application/json")]
                                    headersForReplace = map (\(n, v) -> (CI.mk $ B8.pack n, B8.pack v)) headersForReplace'
 
-modifyQS :: B8.ByteString -> [(String, String)] -> B8.ByteString
-modifyQS orig ps = let orig' = maybe mempty id $ Q.parseQuery orig                                                        
-                       ps'   = Q.queryString $ map (\(x, y) -> (B8.pack x, B8.pack y)) ps
-                   in Q.toString $ orig' `mappend` ps'
 
 parseResponseJSON :: FromJSON a => OAuth2Result L.ByteString -> OAuth2Result a
 parseResponseJSON (Left b) = Left b
@@ -94,8 +70,8 @@ parseResponseJSON (Right b) = case decode b of
                             Nothing -> Left (L8.pack "Could not decode JSON" `L.append` b)
                             Just x -> Right x
 
-iterateOverPages :: (PagableRequestParams rT, PagableResponse a) => (rT -> ApiIO rT a) -> rT -> ApiIO rT a
-iterateOverPages func = iter'
+iteratePages :: (PagableRequestParams rT, PagableResponse a) => (rT -> ApiIO rT a) -> rT -> ApiIO rT a
+iteratePages func = iter'
                             where iter resp reqParams = case nextPageToken resp of
                                                              Nothing -> return resp
                                                              Just tok -> liftM (mergeResponses resp) $ iter' $ setPageToken tok reqParams
