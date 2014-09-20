@@ -2,34 +2,32 @@
 module Network.Google.Calendar.CalendarList where
 
 import           GHC.Generics
-import           Data.Aeson (toJSON)
+import           Data.Aeson (toJSON, ToJSON, Value)
 import           Data.List (intercalate)
 
 import           Network.Google.ApiIO
 import           Network.Google.ApiIO.Generators
+import           Network.Google.ApiIO.Common (urlEncode)
 import           Network.Google.Calendar.MethodCommon
 
 import           Network.Google.Calendar.Entities
 import           Network.Google.Calendar.CalendarList.Entities
 import           Network.HTTP.Types              (StdMethod(..))
 
-mkUrl = mkUrl' . ("calendarList" : )
+mkUrl = mkUrl' . (["users" , "me" , "calendarList"] ++ )
+
+resourceBody :: (ToJSON a) => a -> Maybe Value
+resourceBody = Just . toJSON
 
 -- Method delete
-
-data DeleteResponse = DeleteResponse
-                                deriving (Generic, Show)
-$(genRecJSONInstances "dr" ''DeleteResponse)
 
 data DeleteParams = DeleteParams { dpCalendarId :: CalendarId }
                                 deriving (Generic, Show)
 instance AdditionalParams DeleteParams where
     apMethod _ = DELETE
-    apUrl x = mkUrl [ "delete", dpCalendarId x ]
-data DeleteQueryParams = DeleteQueryParams
-instance QueryParams DeleteQueryParams
+    apUrl x = mkUrl [ urlEncode $ dpCalendarId x ]
 
-delete :: DefaultMethodTag DeleteQueryParams DeleteParams DeleteResponse
+delete :: DefaultMethodTag () DeleteParams ()
 delete = fullScopeMethod
 
 -- Method get
@@ -37,26 +35,27 @@ delete = fullScopeMethod
 data GetParams = GetParams { gpCalendarId :: CalendarId }
                                 deriving (Generic, Show)
 instance AdditionalParams GetParams where
-    apMethod _ = GET 
-    apUrl x = mkUrl [ "get", gpCalendarId x ]
-data GetQueryParams = GetQueryParams
-instance QueryParams GetQueryParams
+    apMethod _ = GET
+    apUrl x = mkUrl [ urlEncode $ gpCalendarId x ]
 
-get :: DefaultMethodTag GetQueryParams GetParams Entry
+get :: DefaultMethodTag () GetParams Resource
 get = readOnlyScopeMethod
 
 -- Method insert
 
-data InsertParams = InsertParams { ipRequestBody :: InsertableEntry }
+data InsertParams = InsertParams { ipRequestBody :: InsertableResource }
                                 deriving (Generic, Show)
 instance AdditionalParams InsertParams where
+    apMethod _ = POST 
     apUrl _ = mkUrl []
-    apBody = Just . toJSON . ipRequestBody
+    apBody = resourceBody . ipRequestBody
 data InsertQueryParams = InsertQueryParams { ipColorRgbFormat :: Maybe Bool }
                                 deriving (Generic, Show)
 $(genQueryParams "ip" ''InsertQueryParams)
+instance DefaultParams InsertQueryParams where
+    defaultParams = InsertQueryParams Nothing
 
-insert :: DefaultMethodTag InsertQueryParams InsertParams Entry
+insert :: DefaultMethodTag InsertQueryParams InsertParams Resource
 insert = fullScopeMethod
 
 -- Method list
@@ -64,7 +63,7 @@ insert = fullScopeMethod
 data ListResponse = ListResponse { lrEtag :: ETag
                                  , lrNextPageToken :: Maybe PageToken
                                  , lrNextSyncToken :: Maybe SyncToken
-                                 , lrItems :: [Entry]
+                                 , lrItems :: [Resource]
                                  }
                                 deriving (Generic, Show)
 $(genPagableResponse "lr" ''ListResponse)
@@ -88,3 +87,41 @@ instance AdditionalParams ListParams where apUrl _ = mkUrl [ "list" ]
 list :: DefaultMethodTag ListQueryParams ListParams ListResponse
 list = readOnlyScopeMethod
 
+
+-- Method patch
+
+data PatchParams = PatchParams { ppCalendarId :: CalendarId }
+                                deriving (Generic, Show)
+instance AdditionalParams PatchParams where
+    apMethod _ = PATCH
+    apUrl x = mkUrl [ urlEncode $ ppCalendarId x ]
+
+data PatchQueryParams = PatchQueryParams { ppColorRgbFormat :: Maybe Bool }
+                                deriving (Generic, Show)
+$(genQueryParams "pp" ''PatchQueryParams)
+instance DefaultParams PatchQueryParams where
+    defaultParams = PatchQueryParams Nothing
+
+patch :: DefaultMethodTag PatchQueryParams PatchParams Resource
+patch = fullScopeMethod
+
+
+-- Method update
+
+data UpdateParams = UpdateParams { upCalendarId :: CalendarId , upRequestBody :: UpdatableResource }
+                                deriving (Generic, Show)
+instance AdditionalParams UpdateParams where
+    apMethod _ = PUT
+    apUrl x = mkUrl [ urlEncode $ upCalendarId x ]
+    apBody = resourceBody . upRequestBody
+
+data UpdateQueryParams = UpdateQueryParams { upColorRgbFormat :: Maybe Bool }
+                                deriving (Generic, Show)
+$(genQueryParams "up" ''UpdateQueryParams)
+instance DefaultParams UpdateQueryParams where
+    defaultParams = UpdateQueryParams Nothing
+
+update :: DefaultMethodTag UpdateQueryParams UpdateParams Resource
+update = fullScopeMethod
+
+-- @TODO watch method
