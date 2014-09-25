@@ -31,7 +31,7 @@ methodTag :: (ApiRequestParams rT, FromJSON b) => [AuthScope] -> MethodTag rT b
 methodTag = flip MethodTag request
 
 rawRequest :: (ApiRequestParams rT) => (OAuth2Result L8.ByteString -> f) -> rT -> ApiIO rT f
-rawRequest r = liftF . (flip RawRequest) r
+rawRequest r = liftF . flip RawRequest r
 
 requestBS :: (ApiRequestParams rT) => rT -> ApiIO rT (OAuth2Result L8.ByteString)
 requestBS = rawRequest id 
@@ -52,11 +52,10 @@ processRequestLBS manager token reqParams = do request <- composeRequest reqPara
                                                response <- authenticatedRequest manager token (requestMethod reqParams) request
                                                return $ handleResponse response
                              where composeRequest reqParams = do initReq <- parseUrl $ requestUrlBase reqParams
-                                                                 return $ let body' = RequestBodyLBS . encode
-                                                                              headers' = replacePairs headersForReplace $ H.requestHeaders initReq
+                                                                 return $ let headers' = replacePairs headersForReplace $ H.requestHeaders initReq
                                                                               qs' = modifyQS (H.queryString initReq) (requestQueryParams reqParams)
                                                                               req = initReq   { H.queryString = qs'}
-                                                                              req' b = req    { H.requestBody = body' b
+                                                                              req' b = req    { H.requestBody = RequestBodyLBS $ encode b
                                                                                               , H.requestHeaders = headers'
                                                                                               }
                                                                            in  maybe req req' $ requestBody reqParams

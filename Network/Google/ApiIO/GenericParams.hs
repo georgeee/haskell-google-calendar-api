@@ -7,6 +7,7 @@ import GHC.Generics
 import Data.DList (DList, toList, empty)
 import Data.Monoid (mappend)
 import Network.Google.ApiIO.Common
+import qualified Data.Text                       as T
 
 
 class ToString a where
@@ -20,6 +21,9 @@ instance ToString Int where
 
 instance ToString Bool where
     toString = show
+
+instance ToString T.Text where
+    toString = T.unpack
 
 instance (ToString s) => ToString (Maybe s) where
     toString (Just v) = toString v

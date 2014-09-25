@@ -17,7 +17,6 @@ import           Network.Google.ApiIO.Entities
 import           Network.Google.ApiIO.Common (removePrefixLCFirst)
 import           Network.Google.ApiIO.Generators (genJSONInstances, genRecJSONInstances, genTagJSONInstances)
 import           Network.Google.ApiIO.GenericParams (ToString(..))
--- @TODO clean input types (E.g. Event), Maybe Bool => Bool, Maybe [] -> [], remove ToJSON instance (check that no use)
 
 
 type Location = String

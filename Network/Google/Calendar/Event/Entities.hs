@@ -4,9 +4,16 @@ module Network.Google.Calendar.Event.Entities where
 import qualified Data.Text                       as T
 import           Network.Google.Calendar.Entities
 import           Network.Google.ApiIO.Entities
+import           Network.Google.ApiIO.GenericParams (ToString(..))
 import           Network.Google.ApiIO.Generators (genJSONInstances, genRecJSONInstances, genTagJSONInstances)
 import           GHC.Generics
 import           Data.HashMap.Strict             (HashMap(..))
+
+data EventOrderBy = OrderByStartTime | OrderByUpdated
+    deriving (Generic, Show)
+instance ToString EventOrderBy where
+    toString OrderByUpdated = "updated"
+    toString OrderByStartTime = "startTime"
 
 data EventTransparency = ETOpaque | ETTransparent
     deriving (Generic, Show)
