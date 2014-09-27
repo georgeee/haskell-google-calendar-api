@@ -8,6 +8,7 @@ import           Network.Google.Calendar.Entities
 import           Network.Google.ApiIO.Generators (genJSONInstances, genRecJSONInstances, genTagJSONInstances, genRecToJSON)
 import           GHC.Generics
 import           Data.Aeson
+import           Network.Google.ApiIO.Entities
 
 data CalendarLERaw = CalendarLERaw { cleRawEtag :: ETag
                                    , cleRawId :: CalendarId

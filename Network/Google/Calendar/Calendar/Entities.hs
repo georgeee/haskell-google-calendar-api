@@ -5,6 +5,7 @@ import qualified Data.Text                       as T
 import           Network.Google.Calendar.Entities
 import           Network.Google.ApiIO.Generators (genJSONInstances, genRecJSONInstances, genTagJSONInstances)
 import           GHC.Generics
+import           Network.Google.ApiIO.Entities
 
 data Calendar = Calendar { cEtag :: ETag
                          , cId :: CalendarId

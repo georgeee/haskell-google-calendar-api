@@ -5,6 +5,7 @@ import           GHC.Generics
 import           Data.List (intercalate)
 
 import           Network.Google.ApiIO
+import           Network.Google.ApiIO.Entities
 import           Network.Google.ApiIO.Generators
 import           Network.Google.ApiIO.Common (urlEncode)
 import           Network.Google.Calendar.MethodCommon

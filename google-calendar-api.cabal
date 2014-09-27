@@ -33,6 +33,7 @@ library
                        timerep              ,
                        old-locale           ,
                        unordered-containers ,
+                       tzdata               ,
                        google-apiIO
                        
   -- hs-source-dirs:      

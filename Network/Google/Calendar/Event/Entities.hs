@@ -92,6 +92,7 @@ data EventDateTimeObject = EventDateTimeObject { edtDate :: Maybe ApiDate
     deriving (Generic, Show)
 $(genRecJSONInstances "edt" ''EventDateTimeObject)
 
+-- @TODO add row data type (like CalendarList)
 data Event = Event { eEtag :: ETag
                    , eId :: EventId
                    , eStatus :: Maybe EventStatus

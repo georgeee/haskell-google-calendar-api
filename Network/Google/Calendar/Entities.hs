@@ -22,7 +22,6 @@ import           Network.Google.ApiIO.GenericParams (ToString(..))
 type Location = String
 type ETag = String
 type CalendarId = String
-type ApiTimeZone = String
 type CalendarColorId = String
 type Email = String
 type EventICalUID = String
